@@ -1,0 +1,9 @@
+[package]
+name = "syntax"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+spans = [] # enable to include byte spans in AST nodes
+
+[dependencies]
