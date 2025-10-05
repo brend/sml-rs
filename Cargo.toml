@@ -8,14 +8,4 @@ license = "MIT"
 authors = ["Your Name <you@example.com>"]
 
 [workspace.dependencies]
-# put shared deps here later (im, thiserror, etc.)[workspace]
-members = ["crates/syntax"]
-resolver = "2"
-
-[workspace.package]
-edition = "2021"
-license = "MIT"
-authors = ["Your Name <you@example.com>"]
-
-[workspace.dependencies]
-# put shared deps here later (im, thiserror, etc.)
+# put shared deps here später (im, thiserror, etc.)

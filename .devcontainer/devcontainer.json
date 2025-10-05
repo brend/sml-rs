@@ -1,6 +1,6 @@
 {
   "name": "sml-rs",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-ubuntu-24.04",
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {},
     "ghcr.io/devcontainers/features/git:1": {}
