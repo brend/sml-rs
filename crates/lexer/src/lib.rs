@@ -2,33 +2,44 @@ use logos::Logos;
 use syntax::Span;
 
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \t\n\r\f]+")] // skip whitespace
+#[logos(skip r"[ \t\n\r\f]+")]
 pub enum TokenKind {
-    // === Literals ===
-    #[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
-    Int(i64),
-    #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse().ok())]
-    Real(f64),
-    #[regex(r#"'(\\.|[^\\'])'"#, |lex| parse_char(lex.slice()).ok())]
-    Char(char),
-    #[regex(r#""([^"\\]|\\.)*""#, |lex| parse_string(lex.slice()).ok())]
-    String(String),
-
-    // === Identifiers and constructors ===
-    #[regex(r"[a-z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
-    Ident(String),
-    #[regex(r"[A-Z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
-    ConIdent(String),
-
-    // === Keywords ===
+    // ===== Keywords (exact tokens; these win over Ident regex) =====
     #[token("fn")]
     KwFn,
+    #[token("fun")]
+    KwFun,
+    #[token("val")]
+    KwVal,
+    #[token("rec")]
+    KwRec,
+    #[token("and")]
+    KwAnd,
+    #[token("type")]
+    KwType,
+    #[token("withtype")]
+    KwWithtype,
+    #[token("datatype")]
+    KwDatatype,
+    #[token("exception")]
+    KwException,
+
     #[token("let")]
     KwLet,
     #[token("in")]
     KwIn,
     #[token("end")]
     KwEnd,
+    #[token("local")]
+    KwLocal,
+    #[token("open")]
+    KwOpen,
+
+    #[token("case")]
+    KwCase,
+    #[token("of")]
+    KwOf,
+
     #[token("if")]
     KwIf,
     #[token("then")]
@@ -39,34 +50,59 @@ pub enum TokenKind {
     KwWhile,
     #[token("do")]
     KwDo,
-    #[token("case")]
-    KwCase,
-    #[token("of")]
-    KwOf,
-    #[token("datatype")]
-    KwDatatype,
-    #[token("type")]
-    KwType,
-    #[token("exception")]
-    KwException,
-    #[token("val")]
-    KwVal,
-    #[token("rec")]
-    KwRec,
-    #[token("and")]
-    KwAnd,
-    #[token("handle")]
-    KwHandle,
+
     #[token("raise")]
     KwRaise,
+    #[token("handle")]
+    KwHandle,
+
+    // boolean & list constructors/special names
     #[token("true")]
     KwTrue,
     #[token("false")]
     KwFalse,
+    #[token("nil")]
+    KwNil, // special constructor in SML
+
+    // overloading/control words
     #[token("ref")]
     KwRef,
+    #[token("andalso")]
+    KwAndalso,
+    #[token("orelse")]
+    KwOrelse,
+    #[token("not")]
+    KwNot,
+    #[token("op")]
+    KwOp, // used to use infix id in prefix position
 
-    // === Symbols ===
+    // fixity decl keywords
+    #[token("infix")]
+    KwInfix,
+    #[token("infixr")]
+    KwInfixr,
+    #[token("nonfix")]
+    KwNonfix,
+
+    // ===== Literals =====
+    #[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
+    Int(i64),
+    #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse().ok())]
+    Real(f64),
+    #[regex(r#"'(\\.|[^\\'])'"#, |lex| parse_char(lex.slice()))]
+    Char(char),
+    #[regex(r#""([^"\\]|\\.)*""#, |lex| parse_string(lex.slice()))]
+    String(String),
+
+    // ===== Idents =====
+    // Lowercase-starting idents (value identifiers)
+    #[regex(r"[a-z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
+    Ident(String),
+    // Uppercase-starting idents (constructor / type constructors in value pos)
+    #[regex(r"[A-Z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
+    ConIdent(String),
+
+    // ===== Symbols =====
     #[token("=")]
     Eq,
     #[token("=>")]
@@ -111,68 +147,88 @@ pub enum TokenKind {
     Star,
     #[token("/")]
     Slash,
-    #[token("<")]
-    Lt,
-    #[token(">")]
-    Gt,
     #[token("<=")]
     Le,
     #[token(">=")]
     Ge,
     #[token("<>")]
     Neq,
+    #[token("<")]
+    Lt,
+    #[token(">")]
+    Gt,
     #[token("@")]
     At,
     #[token("^")]
     Caret,
 
-    // === Error ===
     Error,
 }
 
-// helpers
+// --- helpers & wrapper types unchanged ---
 fn parse_char(s: &str) -> Result<char, ()> {
-    let inner = &s[1..s.len() - 1];
-    Ok(match inner {
-        "\\n" => '\n',
-        "\\t" => '\t',
-        "\\r" => '\r',
-        "\\\\" => '\\',
-        "\\'" => '\'',
-        _ => inner.chars().next().unwrap_or('?'),
-    })
+    // Entfernt die einfachen Anführungszeichen und verarbeitet Escape-Sequenzen
+    let s = s.strip_prefix('\'').and_then(|s| s.strip_suffix('\''));
+    let s = match s {
+        Some(inner) => inner,
+        None => return Err(()),
+    };
+    let mut chars = s.chars();
+    let c = match chars.next() {
+        Some('\\') => match chars.next() {
+            Some('n') => '\n',
+            Some('r') => '\r',
+            Some('t') => '\t',
+            Some('\\') => '\\',
+            Some('\'') => '\'',
+            Some('"') => '"',
+            Some('0') => '\0',
+            Some(other) => other,
+            None => return Err(()),
+        },
+        Some(c) => c,
+        None => return Err(()),
+    };
+    if chars.next().is_some() {
+        return Err(());
+    }
+    Ok(c)
 }
-
 fn parse_string(s: &str) -> Result<String, ()> {
-    let mut out = String::new();
-    let mut chars = s[1..s.len() - 1].chars();
+    // Entfernt die doppelten Anführungszeichen und verarbeitet Escape-Sequenzen
+    let s = s.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
+    let s = match s {
+        Some(inner) => inner,
+        None => return Err(()),
+    };
+    let mut result = String::new();
+    let mut chars = s.chars();
     while let Some(c) = chars.next() {
         if c == '\\' {
-            if let Some(n) = chars.next() {
-                match n {
-                    'n' => out.push('\n'),
-                    't' => out.push('\t'),
-                    'r' => out.push('\r'),
-                    '"' => out.push('"'),
-                    '\\' => out.push('\\'),
-                    _ => out.push(n),
-                }
+            match chars.next() {
+                Some('n') => result.push('\n'),
+                Some('r') => result.push('\r'),
+                Some('t') => result.push('\t'),
+                Some('\\') => result.push('\\'),
+                Some('"') => result.push('"'),
+                Some('\'') => result.push('\''),
+                Some('0') => result.push('\0'),
+                Some(other) => result.push(other),
+                None => return Err(()),
             }
         } else {
-            out.push(c);
+            result.push(c);
         }
     }
-    Ok(out)
+    Ok(result)
 }
 
-/// A token with its text span.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
 }
 
-/// Convert the logos range to our syntax::Span
 impl From<(TokenKind, std::ops::Range<usize>)> for Token {
     fn from((kind, range): (TokenKind, std::ops::Range<usize>)) -> Self {
         Token {
@@ -182,15 +238,17 @@ impl From<(TokenKind, std::ops::Range<usize>)> for Token {
     }
 }
 
-/// Tokenize a string.
 pub fn lex(source: &str) -> Vec<Token> {
     let mut lexer = TokenKind::lexer(source);
     let mut tokens = Vec::new();
     while let Some(kind) = lexer.next() {
         let span = lexer.span();
-        if let Ok(kind) = kind {
-            tokens.push(Token::from((kind, span)));
-        }
+        // Wenn kind ein Result ist, extrahiere oder setze Error
+        let kind = match kind {
+            Ok(k) => k,
+            Err(_) => TokenKind::Error,
+        };
+        tokens.push(Token::from((kind, span)));
     }
     tokens
 }
