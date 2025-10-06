@@ -94,8 +94,8 @@ impl<'a> TokenStream<'a> {
 
     /// Slice the original source by `span` (useful for error messages).
     pub fn slice(&self, span: Span) -> &str {
-        let lo = span_lo(span) as usize;
-        let hi = span_hi(span) as usize;
+        let lo = span_lo(&span) as usize;
+        let hi = span_hi(&span) as usize;
         &self.src[lo.min(self.src.len()) .. hi.min(self.src.len())]
     }
 }
@@ -186,11 +186,22 @@ fn display_kind(k: &TokenKind) -> &'static str {
 }
 
 // Span helpers that work with or without the 'spans' feature.
-fn span_lo(s: Span) -> u32 {
-    #[cfg(feature = "spans")] { s.lo }
-    #[cfg(not(feature = "spans"))] { 0 }
+#[cfg(feature = "spans")]
+fn span_hi(s: &Span) -> u32 {
+    s.hi
 }
-fn span_hi(s: Span) -> u32 {
-    #[cfg(feature = "spans")] { s.hi }
-    #[cfg(not(feature = "spans"))] { 0 }
+
+#[cfg(not(feature = "spans"))]
+fn span_hi(_: &Span) -> u32 {
+    0
+}
+
+#[cfg(feature = "spans")]
+fn span_lo(s: &Span) -> u32 {
+    s.lo
+}
+
+#[cfg(not(feature = "spans"))]
+fn span_lo(_: &Span) -> u32 {
+    0
 }

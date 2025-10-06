@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 logos = "0.13"
 syntax = { path = "../syntax" }
+
+[features]
+spans = [] # enable to include byte spans in lexer
