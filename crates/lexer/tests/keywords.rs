@@ -2,7 +2,7 @@ use lexer::*;
 
 #[test]
 fn keywords_win_over_ident() {
-    let toks = lex("val fun andalso orelse not ref op withtype open local infix infixr nonfix");
+    let toks = lex_raw("val fun andalso orelse not ref op withtype open local infix infixr nonfix");
     use TokenKind::*;
     let kinds: Vec<_> = toks.into_iter().map(|t| t.kind).collect();
     println!("Token-Kinds: {:?}", kinds);
@@ -23,7 +23,7 @@ fn keywords_win_over_ident() {
 
 #[test]
 fn nil_is_keyword_constructor() {
-    let toks = lex("nil :: []");
+    let toks = lex_raw("nil :: []");
     use TokenKind::*;
     let kinds: Vec<_> = toks.into_iter().map(|t| t.kind).collect();
     assert!(matches!(kinds[0], KwNil));

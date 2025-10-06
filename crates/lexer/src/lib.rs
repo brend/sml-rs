@@ -1,4 +1,5 @@
 use logos::Logos;
+use std::string::String as RustString;
 use syntax::Span;
 
 #[derive(Logos, Debug, Clone, PartialEq)]
@@ -92,15 +93,15 @@ pub enum TokenKind {
     #[regex(r#"'(\\.|[^\\'])'"#, |lex| parse_char(lex.slice()))]
     Char(char),
     #[regex(r#""([^"\\]|\\.)*""#, |lex| parse_string(lex.slice()))]
-    String(String),
+    String(RustString),
 
     // ===== Idents =====
     // Lowercase-starting idents (value identifiers)
     #[regex(r"[a-z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
-    Ident(String),
+    Ident(RustString),
     // Uppercase-starting idents (constructor / type constructors in value pos)
     #[regex(r"[A-Z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
-    ConIdent(String),
+    ConIdent(RustString),
 
     // ===== Symbols =====
     #[token("=")]
@@ -162,6 +163,8 @@ pub enum TokenKind {
     #[token("^")]
     Caret,
 
+    Eof,
+
     Error,
 }
 
@@ -194,14 +197,14 @@ fn parse_char(s: &str) -> Result<char, ()> {
     }
     Ok(c)
 }
-fn parse_string(s: &str) -> Result<String, ()> {
+fn parse_string(s: &str) -> Result<RustString, ()> {
     // Entfernt die doppelten Anführungszeichen und verarbeitet Escape-Sequenzen
     let s = s.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
     let s = match s {
         Some(inner) => inner,
         None => return Err(()),
     };
-    let mut result = String::new();
+    let mut result = RustString::new();
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
         if c == '\\' {
@@ -238,17 +241,43 @@ impl From<(TokenKind, std::ops::Range<usize>)> for Token {
     }
 }
 
-pub fn lex(source: &str) -> Vec<Token> {
-    let mut lexer = TokenKind::lexer(source);
-    let mut tokens = Vec::new();
-    while let Some(kind) = lexer.next() {
-        let span = lexer.span();
-        // Wenn kind ein Result ist, extrahiere oder setze Error
+// Public lex entry: returns a Vec<Token> (no comments handled here yet)
+pub fn lex_raw(source: &str) -> Vec<Token> {
+    let mut lx = TokenKind::lexer(source);
+    let mut out = Vec::new();
+    while let Some(kind) = lx.next() {
+        let span = lx.span();
         let kind = match kind {
             Ok(k) => k,
             Err(_) => TokenKind::Error,
         };
-        tokens.push(Token::from((kind, span)));
+        out.push(Token::from((kind, span)));
     }
-    tokens
+    out
 }
+
+/// Öffentliche API für Tests und Nutzer: ruft lex_raw auf
+pub fn lex(source: &str) -> Vec<Token> {
+    lex_raw(source)
+}
+
+/// Lightweight error type the parser can use when expectations fail.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LexError {
+    pub message: RustString,
+    pub span: Span,
+}
+
+impl LexError {
+    pub fn new<M: Into<RustString>>(message: M, span: Span) -> Self {
+        Self {
+            message: message.into(),
+            span,
+        }
+    }
+}
+
+// Re-export the stream API
+pub mod stream;
+pub use stream::TokenStream;
+pub use TokenKind::*;
