@@ -1,4 +1,4 @@
-use crate::{lex_raw, LexError, Token, TokenKind, Eof};
+use crate::{lex_raw, Eof, LexError, Token, TokenKind};
 use syntax::Span;
 
 /// A cursor over a vector of tokens with convenient parsing helpers.
@@ -28,21 +28,36 @@ impl<'a> TokenStream<'a> {
     pub fn new(source: &'a str) -> Self {
         let mut toks = lex_raw(source);
         // Ensure there's exactly one EOF at the end with a 0-width span at source end.
-        toks.push(Token { kind: Eof, span: Span::new(source.len() as u32, source.len() as u32) });
-        Self { src: source, toks, idx: 0 }
+        toks.push(Token {
+            kind: Eof,
+            span: Span::new(source.len() as u32, source.len() as u32),
+        });
+        Self {
+            src: source,
+            toks,
+            idx: 0,
+        }
     }
 
     /// Current index (for debugging).
-    pub fn position(&self) -> usize { self.idx }
+    pub fn position(&self) -> usize {
+        self.idx
+    }
 
     /// Save location for possible backtracking.
-    pub fn checkpoint(&self) -> Checkpoint { Checkpoint(self.idx) }
+    pub fn checkpoint(&self) -> Checkpoint {
+        Checkpoint(self.idx)
+    }
 
     /// Rewind to a checkpoint.
-    pub fn rewind(&mut self, cp: Checkpoint) { self.idx = cp.0; }
+    pub fn rewind(&mut self, cp: Checkpoint) {
+        self.idx = cp.0;
+    }
 
     /// Peek at the current token without consuming.
-    pub fn peek(&self) -> &Token { &self.toks[self.idx] }
+    pub fn peek(&self) -> &Token {
+        &self.toks[self.idx]
+    }
 
     /// Peek `n` tokens ahead (0 = current). Sticks to EOF at end.
     pub fn nth(&self, n: usize) -> &Token {
@@ -50,16 +65,18 @@ impl<'a> TokenStream<'a> {
         &self.toks[i.min(self.toks.len() - 1)]
     }
 
-    /// Consume and return the current token (never advances past EOF).
-    pub fn next(&mut self) -> &Token {
-        if self.idx < self.toks.len() - 1 { self.idx += 1; }
+    // Umbenennung für Konsistenz
+    pub fn advance(&mut self) -> &Token {
+        if self.idx < self.toks.len() - 1 {
+            self.idx += 1;
+        }
         &self.toks[self.idx - 1]
     }
 
     /// Consume the current token **iff** it matches `kind`.
     pub fn consume_if(&mut self, kind: TokenKind) -> bool {
         if self.peek().kind == kind {
-            self.next();
+            self.advance();
             true
         } else {
             false
@@ -69,7 +86,7 @@ impl<'a> TokenStream<'a> {
     /// Expect a specific token kind; returns error with the current span if not present.
     pub fn expect(&mut self, kind: TokenKind) -> Result<Token, LexError> {
         if self.peek().kind == kind {
-            Ok(self.next().clone())
+            Ok(self.advance().clone())
         } else {
             Err(self.unexpected(&[kind]))
         }
@@ -79,7 +96,7 @@ impl<'a> TokenStream<'a> {
     pub fn expect_any(&mut self, kinds: &[TokenKind]) -> Result<Token, LexError> {
         let cur = &self.peek().kind;
         if kinds.iter().any(|k| k == cur) {
-            Ok(self.next().clone())
+            Ok(self.advance().clone())
         } else {
             Err(self.unexpected(kinds))
         }
@@ -88,21 +105,28 @@ impl<'a> TokenStream<'a> {
     /// Build a friendly unexpected-token error.
     pub fn unexpected(&self, expected: &[TokenKind]) -> LexError {
         let got = &self.peek().kind;
-        let exp_list = expected.iter().map(display_kind).collect::<Vec<_>>().join(", ");
-        LexError::new(format!("expected {exp_list}, found {}", display_kind(got)), self.peek().span)
+        let exp_list = expected
+            .iter()
+            .map(display_kind)
+            .collect::<Vec<_>>()
+            .join(", ");
+        LexError::new(
+            format!("expected {exp_list}, found {}", display_kind(got)),
+            self.peek().span,
+        )
     }
 
     /// Slice the original source by `span` (useful for error messages).
     pub fn slice(&self, span: Span) -> &str {
         let lo = span_lo(&span) as usize;
         let hi = span_hi(&span) as usize;
-        &self.src[lo.min(self.src.len()) .. hi.min(self.src.len())]
+        &self.src[lo.min(self.src.len())..hi.min(self.src.len())]
     }
 }
 
 // ----- Small helpers for pretty display & Span reading -----
 
-fn display_kind(k: &TokenKind) -> &'static str {
+pub fn display_kind(k: &TokenKind) -> &'static str {
     use TokenKind::*;
     match k {
         // keywords (add as needed)
