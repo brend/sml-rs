@@ -1,5 +1,7 @@
+mod fixity;
 mod util;
 
+use fixity::{Fixity, FixityEnv};
 use lexer::{TokenKind as T, TokenStream};
 use syntax::{ast::*, Span};
 
@@ -20,8 +22,47 @@ impl ParseError {
     }
 }
 
+#[derive(Clone, Debug)]
+enum OpToken {
+    Sym(String, Span),   // e.g. "+"
+    Ident(String, Span), // e.g. "++" after `op`
+}
+
+fn peek_op(ts: &lexer::TokenStream) -> Option<OpToken> {
+    use lexer::TokenKind as T;
+    let t = ts.peek();
+    let span = t.span;
+    match &t.kind {
+        // symbolic operators (convert to string)
+        T::Plus => Some(OpToken::Sym("+".into(), span)),
+        T::Minus => Some(OpToken::Sym("-".into(), span)),
+        T::Star => Some(OpToken::Sym("*".into(), span)),
+        T::Slash => Some(OpToken::Sym("/".into(), span)),
+        T::Eq => Some(OpToken::Sym("=".into(), span)),
+        T::Neq => Some(OpToken::Sym("<>".into(), span)),
+        T::Le => Some(OpToken::Sym("<=".into(), span)),
+        T::Ge => Some(OpToken::Sym(">=".into(), span)),
+        T::Lt => Some(OpToken::Sym("<".into(), span)),
+        T::Gt => Some(OpToken::Sym(">".into(), span)),
+        T::Caret => Some(OpToken::Sym("^".into(), span)),
+        T::At => Some(OpToken::Sym("@".into(), span)),
+        T::Assign => Some(OpToken::Sym(":=".into(), span)),
+        T::Cons => Some(OpToken::Sym("::".into(), span)),
+        // NOTE: "->" is not an infix in SML expressions; it belongs to types and fn arrows.
+        // Identifier operators in prefix position use `op`:
+        T::KwOp => {
+            // lookahead: op IDENT / CONIDENT / symbolic IDENT (your lexer uses Ident/ConIdent)
+            // We’ll treat the next token text as operator name and consume both.
+            // (We *don’t* consume here; actual consumption happens in parse_infix.)
+            Some(OpToken::Ident("<op-ident>".into(), span))
+        }
+        _ => None,
+    }
+}
+
 pub struct Parser<'a> {
     ts: TokenStream<'a>,
+    fix: FixityEnv,
 }
 // Hilfsfunktion: LexError -> ParseError
 fn to_parse_err(e: lexer::LexError) -> ParseError {
@@ -32,35 +73,13 @@ impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             ts: TokenStream::new(source),
+            fix: FixityEnv::default(),
         }
     }
 
     // ===== entry points =====
     pub fn parse_exp(&mut self) -> PResult<Exp> {
-        // Einfache Unterstützung für binäre Operatoren (nur +)
-        let mut lhs = self.parse_app()?;
-        loop {
-            let is_plus = matches!(self.ts.peek().kind, lexer::TokenKind::Plus);
-            if !is_plus {
-                break;
-            }
-            let op_tok_span = self.ts.peek().span;
-            self.ts.advance();
-            // rhs in Block, um Borrow zu lösen
-            let rhs = { self.parse_app()? };
-            let span = util::join(util::span_of_exp(&lhs), util::span_of_exp(&rhs));
-            lhs = Exp::App {
-                fun: Box::new(Exp::Var {
-                    name: Name {
-                        text: "+".to_string(),
-                    },
-                    span: op_tok_span,
-                }),
-                arg: Box::new(Exp::Tuple(vec![lhs, rhs], span)),
-                span,
-            };
-        }
-        Ok(lhs)
+        self.parse_expr_bp(0)
     }
 
     pub fn parse_decs(&mut self) -> PResult<Vec<Dec>> {
@@ -127,6 +146,64 @@ impl<'a> Parser<'a> {
                     span,
                 })
             }
+            lexer::TokenKind::KwInfix | lexer::TokenKind::KwInfixr | lexer::TokenKind::KwNonfix => {
+                use lexer::TokenKind as T;
+                let (assoc, prec) = match self.ts.peek().kind {
+                    T::KwInfix => {
+                        self.ts.advance();
+                        (Assoc::Left, self.parse_precedence()?)
+                    }
+                    T::KwInfixr => {
+                        self.ts.advance();
+                        (Assoc::Right, self.parse_precedence()?)
+                    }
+                    T::KwNonfix => {
+                        self.ts.advance();
+                        (Assoc::Non, 0)
+                    }
+                    _ => unreachable!(),
+                };
+                let mut ops = Vec::new();
+                loop {
+                    match self.ts.peek().kind.clone() {
+                        T::Ident(s) | T::ConIdent(s) => {
+                            self.ts.advance();
+                            ops.push(s);
+                        }
+                        // allow symbolic names via `op` + IDENT
+                        T::KwOp => {
+                            self.ts.advance();
+                            match self.ts.peek().kind.clone() {
+                                T::Ident(s) | T::ConIdent(s) => {
+                                    self.ts.advance();
+                                    ops.push(s);
+                                }
+                                _ => return Err(self.unexpected_here(&["identifier after 'op'"])),
+                            }
+                        }
+                        _ => break,
+                    }
+                }
+                // mutate env
+                if assoc == Assoc::Non {
+                    for o in &ops {
+                        self.fix.remove(o);
+                    }
+                } else {
+                    let fx = Fixity { prec, assoc };
+                    for o in &ops {
+                        self.fix.set(o, fx);
+                    }
+                }
+                let span = util::join(span_start, self.ts.peek().span);
+                Ok(Dec::Fixity(
+                    syntax::ast::FixityDecl::Infix {
+                        precedence: prec,
+                        ops: ops.iter().map(|s| Name { text: s.clone() }).collect(),
+                    },
+                    span,
+                ))
+            }
             // TODO: datatype, type, exception, local, fixity, open
             _ => Err(self.unexpected_here(&["declaration (val/fun)"])),
         }
@@ -151,6 +228,120 @@ impl<'a> Parser<'a> {
     }
 
     // ===== expressions =====
+    fn parse_expr_bp(&mut self, min_prec: u8) -> PResult<Exp> {
+        let mut lhs = self.parse_app_primary_chain()?;
+        loop {
+            let op = match self.next_operator()? {
+                None => break,
+                Some(op) => op,
+            };
+            let (op_name, op_span, fix) = match &op {
+                OpToken::Sym(s, sp) => match self.fix.get(s) {
+                    Some(fx) => (s.clone(), *sp, fx),
+                    None => break,
+                },
+                OpToken::Ident(_, sp) => {
+                    self.ts
+                        .expect(lexer::TokenKind::KwOp)
+                        .map_err(to_parse_err)?;
+                    let name = match self.ts.peek().kind.clone() {
+                        lexer::TokenKind::Ident(s) | lexer::TokenKind::ConIdent(s) => {
+                            self.ts.advance();
+                            s
+                        }
+                        _ => return Err(self.unexpected_here(&["operator identifier after 'op'"])),
+                    };
+                    let fx = self.fix.get(&name).ok_or_else(|| {
+                        ParseError::new(
+                            format!("operator '{name}' used with 'op' but not declared infix"),
+                            *sp,
+                        )
+                    })?;
+                    (name, *sp, fx)
+                }
+            };
+            let next_min = match fix.assoc {
+                Assoc::Left => fix.prec + 1,
+                Assoc::Right => fix.prec,
+                Assoc::Non => 255,
+            };
+            if !matches!(op, OpToken::Ident(_, _)) {
+                let _ = self.ts.advance();
+            }
+            let rhs = self.parse_expr_bp(next_min)?;
+            let span = util::join(util::span_of_exp(&lhs), util::span_of_exp(&rhs));
+            let op_var = Exp::Var {
+                name: Name {
+                    text: op_name.clone(),
+                },
+                span: op_span,
+            };
+            let app1 = Exp::App {
+                fun: Box::new(op_var),
+                arg: Box::new(lhs),
+                span,
+            };
+            lhs = Exp::App {
+                fun: Box::new(app1),
+                arg: Box::new(rhs),
+                span,
+            };
+        } 
+        // Postfix: handle
+    if matches!(self.ts.peek().kind, T::KwHandle) {
+        let handle_kw = self.ts.advance();
+        let mut matches_v = Vec::new();
+        loop {
+            let p = self.parse_pat()?;
+            self.ts.expect(T::FatArrow).map_err(to_parse_err)?;
+            let b = self.parse_expr_bp(0)?; // parse a full expression for RHS
+            let sp = util::join(util::span_of_pat(&p), util::span_of_exp(&b));
+            matches_v.push(Match { pat: p, body: b, span: sp });
+            if self.ts.consume_if(T::Bar) { continue; }
+            break;
+        }
+        let span = util::join(util::span_of_exp(&lhs), matches_v.last().unwrap().span);
+        lhs = Exp::Handle { exp: Box::new(lhs), matches: matches_v, span };
+    }
+    
+        Ok(lhs)
+    }
+    // Precedence parser für Infix-Deklarationen
+    fn parse_precedence(&mut self) -> PResult<u8> {
+        match self.ts.peek().kind {
+            lexer::TokenKind::Int(n) => {
+                self.ts.advance();
+                u8::try_from(n)
+                    .map_err(|_| ParseError::new("Ungültige Präzedenzzahl", self.ts.peek().span))
+            }
+            _ => Ok(0), // Standardpräzedenz
+        }
+    }
+
+    // helper: return the operator if present but do not consume any tokens here
+    fn next_operator(&mut self) -> PResult<Option<OpToken>> {
+        Ok(peek_op(&self.ts))
+    }
+
+    // parse a primary, then as many *juxtaposition* applications as possible (a b c)
+    fn parse_app_primary_chain(&mut self) -> PResult<Exp> {
+        let mut e = self.parse_primary()?;
+        loop {
+            if self.starts_of_exp() {
+                let arg = self.parse_primary()?;
+                let span = util::join(util::span_of_exp(&e), util::span_of_exp(&arg));
+                e = Exp::App {
+                    fun: Box::new(e),
+                    arg: Box::new(arg),
+                    span,
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(e)
+    }
+
     // app := primary { primary }
     fn parse_app(&mut self) -> PResult<Exp> {
         let mut e = self.parse_primary()?;
@@ -214,7 +405,7 @@ impl<'a> Parser<'a> {
             }
             KwNil => {
                 self.ts.advance();
-                Exp::Lit(Lit::Unit(span))
+            Exp::List(vec![], span)
             }
             Int(n) => {
                 self.ts.advance();
