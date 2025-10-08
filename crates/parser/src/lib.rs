@@ -260,6 +260,9 @@ impl<'a> Parser<'a> {
                     (name, *sp, fx)
                 }
             };
+            if fix.prec < min_prec {
+                break;
+            }
             let next_min = match fix.assoc {
                 Assoc::Left => fix.prec + 1,
                 Assoc::Right => fix.prec,
@@ -289,7 +292,7 @@ impl<'a> Parser<'a> {
         } 
         // Postfix: handle
     if matches!(self.ts.peek().kind, T::KwHandle) {
-        let handle_kw = self.ts.advance();
+        let _handle_kw = self.ts.advance();
         let mut matches_v = Vec::new();
         loop {
             let p = self.parse_pat()?;
@@ -342,25 +345,7 @@ impl<'a> Parser<'a> {
         Ok(e)
     }
 
-    // app := primary { primary }
-    fn parse_app(&mut self) -> PResult<Exp> {
-        let mut e = self.parse_primary()?;
-        loop {
-            // stop if next token starts something that can't be an application rhs
-            if self.starts_of_exp() {
-                let arg = self.parse_primary()?;
-                let span = util::join(util::span_of_exp(&e), util::span_of_exp(&arg));
-                e = Exp::App {
-                    fun: Box::new(e),
-                    arg: Box::new(arg),
-                    span,
-                };
-            } else {
-                break;
-            }
-        }
-        Ok(e)
-    }
+    // (removed unused parse_app method)
 
     fn starts_of_exp(&self) -> bool {
         use T::*;
@@ -371,7 +356,7 @@ impl<'a> Parser<'a> {
             | KwTrue | KwFalse | KwNil
             | LParen | LBrace | LBracket
             | Hash // selector: #lbl e
-            | KwFn | KwLet | KwIf | KwWhile | KwCase | KwRaise | KwHandle
+            | KwFn | KwLet | KwIf | KwWhile | KwCase | KwRaise
         )
     }
 
@@ -669,13 +654,8 @@ impl<'a> Parser<'a> {
         let t = self.ts.peek().clone();
         let span = t.span;
         Ok(match t.kind {
-            Ident(s) => {
-                self.ts.advance();
-                Pat::Var {
-                    name: Name { text: s },
-                    span,
-                }
-            }
+            Ident(s) if s == "_" => { self.ts.advance(); Pat::Wild(span) }
+Ident(s) => { self.ts.advance(); Pat::Var { name: Name { text: s }, span } }
             ConIdent(s) => {
                 self.ts.advance();
                 // Optional argument: C p  (greedy attempt)

@@ -18,8 +18,6 @@ impl Default for FixityEnv {
 }
 
 impl FixityEnv {
-    pub fn push(&mut self) { self.stack.push(HashMap::new()); }
-    pub fn pop(&mut self) { self.stack.pop(); }
 
     pub fn set(&mut self, op: &str, fx: Fixity) {
         self.stack.last_mut().unwrap().insert(op.to_string(), fx);
