@@ -163,27 +163,54 @@ impl<'a> Parser<'a> {
                     }
                     _ => unreachable!(),
                 };
-                let mut ops = Vec::new();
-                loop {
-                    match self.ts.peek().kind.clone() {
-                        T::Ident(s) | T::ConIdent(s) => {
-                            self.ts.advance();
-                            ops.push(s);
-                        }
-                        // allow symbolic names via `op` + IDENT
-                        T::KwOp => {
-                            self.ts.advance();
-                            match self.ts.peek().kind.clone() {
-                                T::Ident(s) | T::ConIdent(s) => {
-                                    self.ts.advance();
-                                    ops.push(s);
-                                }
-                                _ => return Err(self.unexpected_here(&["identifier after 'op'"])),
-                            }
-                        }
-                        _ => break,
-                    }
+let mut ops = Vec::new();
+loop {
+    use lexer::TokenKind as T;
+    // capture current token and span
+    let t = self.ts.peek().clone();
+    let name_opt: Option<String> = match t.kind {
+        // alphanumeric operator names (e.g. "div", "mod", "foo")
+        T::Ident(ref s) | T::ConIdent(ref s) => Some(s.clone()),
+
+        // symbolic operators (e.g. + - * / :: <= >= < > = <> ^ @ :=)
+        T::Plus      => Some("+".into()),
+        T::Minus     => Some("-".into()),
+        T::Star      => Some("*".into()),
+        T::Slash     => Some("/".into()),
+        T::Eq        => Some("=".into()),
+        T::Neq       => Some("<>".into()),
+        T::Le        => Some("<=".into()),
+        T::Ge        => Some(">=".into()),
+        T::Lt        => Some("<".into()),
+        T::Gt        => Some(">".into()),
+        T::Caret     => Some("^".into()),
+        T::At        => Some("@".into()),
+        T::Assign    => Some(":=".into()),
+        T::Cons      => Some("::".into()),
+
+        // optional: allow `op IDENT` here too (though SML usually doesn’t need `op` in fixity decls)
+        T::KwOp => {
+            self.ts.advance(); // consume 'op'
+            match self.ts.peek().kind.clone() {
+                T::Ident(s) | T::ConIdent(s) => {
+                    self.ts.advance();
+                    ops.push(s);
+                    continue;
                 }
+                _ => return Err(self.unexpected_here(&["identifier after 'op'"])),
+            }
+        }
+
+        _ => None,
+    };
+
+    if let Some(name) = name_opt {
+        self.ts.advance(); // consume the operator token we just recognized
+        ops.push(name);
+        continue;
+    }
+    break; // no more operator names
+}
                 // mutate env
                 if assoc == Assoc::Non {
                     for o in &ops {
@@ -289,24 +316,25 @@ impl<'a> Parser<'a> {
                 arg: Box::new(rhs),
                 span,
             };
-        } 
-        // Postfix: handle
-    if matches!(self.ts.peek().kind, T::KwHandle) {
-        let _handle_kw = self.ts.advance();
-        let mut matches_v = Vec::new();
-        loop {
-            let p = self.parse_pat()?;
-            self.ts.expect(T::FatArrow).map_err(to_parse_err)?;
-            let b = self.parse_expr_bp(0)?; // parse a full expression for RHS
-            let sp = util::join(util::span_of_pat(&p), util::span_of_exp(&b));
-            matches_v.push(Match { pat: p, body: b, span: sp });
-            if self.ts.consume_if(T::Bar) { continue; }
-            break;
         }
-        let span = util::join(util::span_of_exp(&lhs), matches_v.last().unwrap().span);
-        lhs = Exp::Handle { exp: Box::new(lhs), matches: matches_v, span };
+        // Postfix: handle
+        // after building `lhs` and finishing infix parsing
+if matches!(self.ts.peek().kind, T::KwHandle) {
+    let _ = self.ts.advance(); // consume 'handle'
+    let mut matches_v = Vec::new();
+    loop {
+        let p = self.parse_pat()?;                 // pattern
+        self.ts.expect(T::FatArrow).map_err(to_parse_err)?;
+        let b = self.parse_expr_bp(0)?;            // expression
+        let sp = util::join(util::span_of_pat(&p), util::span_of_exp(&b));
+        matches_v.push(Match { pat: p, body: b, span: sp });
+        if self.ts.consume_if(lexer::TokenKind::Bar) { continue; }
+        break;
     }
-    
+    let span = util::join(util::span_of_exp(&lhs), matches_v.last().unwrap().span);
+    lhs = Exp::Handle { exp: Box::new(lhs), matches: matches_v, span };
+}
+
         Ok(lhs)
     }
     // Precedence parser für Infix-Deklarationen
@@ -390,7 +418,7 @@ impl<'a> Parser<'a> {
             }
             KwNil => {
                 self.ts.advance();
-            Exp::List(vec![], span)
+                Exp::List(vec![], span)
             }
             Int(n) => {
                 self.ts.advance();
@@ -429,7 +457,6 @@ impl<'a> Parser<'a> {
             KwWhile => return self.parse_while(),
             KwCase => return self.parse_case(),
             KwRaise => return self.parse_raise(),
-            KwHandle => return self.parse_handle(),
 
             _ => return Err(self.unexpected_here(&["expression"])),
         })
@@ -537,6 +564,7 @@ impl<'a> Parser<'a> {
 
     fn parse_let(&mut self) -> PResult<Exp> {
         let kw = self.ts.expect(T::KwLet).map_err(to_parse_err)?;
+        self.fix.push();
         let mut decs = Vec::new();
         while !self.ts.consume_if(T::KwIn) {
             decs.push(self.parse_dec()?);
@@ -544,6 +572,7 @@ impl<'a> Parser<'a> {
         }
         let body = self.parse_exp()?;
         let end = self.ts.expect(T::KwEnd).map_err(to_parse_err)?;
+        self.fix.pop();
         let span = util::join(kw.span, end.span);
         Ok(Exp::Let {
             decs,
@@ -619,34 +648,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_handle(&mut self) -> PResult<Exp> {
-        let kw = self.ts.expect(T::KwHandle).map_err(to_parse_err)?;
-        let e = self.parse_exp()?;
-        // NB: in real SML grammar, `exp handle match+`
-        let mut matches_v = Vec::new();
-        self.ts.expect(T::KwHandle).map_err(to_parse_err).ok(); // allow `exp handle p => e | ...`
-        loop {
-            let p = self.parse_pat()?;
-            self.ts.expect(T::FatArrow).map_err(to_parse_err)?;
-            let b = self.parse_exp()?;
-            let span = util::join(util::span_of_pat(&p), util::span_of_exp(&b));
-            matches_v.push(Match {
-                pat: p,
-                body: b,
-                span,
-            });
-            if self.ts.consume_if(T::Bar) {
-                continue;
-            }
-            break;
-        }
-        let span = util::join(kw.span, matches_v.last().map(|m| m.span).unwrap_or(kw.span));
-        Ok(Exp::Handle {
-            exp: Box::new(e),
-            matches: matches_v,
-            span,
-        })
-    }
+    
 
     // ===== patterns (subset) =====
     fn parse_pat(&mut self) -> PResult<Pat> {
@@ -654,8 +656,17 @@ impl<'a> Parser<'a> {
         let t = self.ts.peek().clone();
         let span = t.span;
         Ok(match t.kind {
-            Ident(s) if s == "_" => { self.ts.advance(); Pat::Wild(span) }
-Ident(s) => { self.ts.advance(); Pat::Var { name: Name { text: s }, span } }
+            Ident(s) if s == "_" => {
+                self.ts.advance();
+                Pat::Wild(span)
+            }
+            Ident(s) => {
+                self.ts.advance();
+                Pat::Var {
+                    name: Name { text: s },
+                    span,
+                }
+            }
             ConIdent(s) => {
                 self.ts.advance();
                 // Optional argument: C p  (greedy attempt)

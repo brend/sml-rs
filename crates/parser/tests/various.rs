@@ -1,3 +1,4 @@
+use lexer::Token;
 use parser::{parse_decs, parse_exp};
 
 #[test]
@@ -9,7 +10,15 @@ fn nil_and_empty_list() {
 
 #[test]
 fn handle_postfix() {
-    let e = parse_exp("f x handle E => 1 | _ => 2").unwrap();
+
+    let ts = lexer:: TokenStream::new("f x handle Exn => 1 | _ => 2");
+
+// print the tokens for debugging
+    for (i, tok) in ts.toks.iter().enumerate() {
+        println!("Token {}: {:?} at {:?}", i, tok.kind, tok.span);
+    }
+
+    let e = parse_exp("f x handle Exn => 1 | _ => 2").unwrap();
     // Expect Exp::Handle with scrutinee (f x) and two matches
 }
 

@@ -16,7 +16,7 @@ use syntax::Span;
 #[derive(Clone)]
 pub struct TokenStream<'a> {
     src: &'a str,
-    toks: Vec<Token>,
+    pub toks: Vec<Token>,
     idx: usize,
 }
 
