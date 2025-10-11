@@ -24,7 +24,7 @@ fn handle_postfix() {
 
 #[test]
 fn infix_prec() {
-    let src = "infix 7 + \n infix 3 = \n 1 + 2 = 3";
+    let src = "infix 7 + \n infix 3 = \nval _ = 1 + 2 = 3";
     let e = parse_decs(src).unwrap();
     // rhs should shape like (=) ((+) 1 2) 3; smoke-check it doesn't error
 }
