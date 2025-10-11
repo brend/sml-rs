@@ -97,10 +97,10 @@ pub enum TokenKind {
 
     // ===== Idents =====
     // Lowercase-starting idents (value identifiers)
-    #[regex(r"[a-z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
+    #[regex(r"[a-z_][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
     Ident(RustString),
     // Uppercase-starting idents (constructor / type constructors in value pos)
-    #[regex(r"[A-Z_][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
+    #[regex(r"[A-Z][A-Za-z0-9_']*", |lex| lex.slice().to_string())]
     ConIdent(RustString),
 
     // ===== Symbols =====
