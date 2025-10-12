@@ -863,6 +863,9 @@ if matches!(self.ts.peek().kind, T::KwHandle) {
 pub fn parse_exp(source: &str) -> PResult<Exp> {
     Parser::new(source).parse_exp()
 }
+pub fn parse_pat(source: &str) -> PResult<Pat> {
+    Parser::new(source).parse_pat()
+}
 pub fn parse_decs(source: &str) -> PResult<Vec<Dec>> {
     Parser::new(source).parse_decs()
 }
