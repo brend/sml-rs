@@ -203,6 +203,7 @@ pub fn display_kind(k: &TokenKind) -> &'static str {
         Gt => "'>'",
         At => "'@'",
         Caret => "'^'",
+        Quote => "'",
 
         Eof => "end of file",
         Error => "invalid token",

@@ -162,6 +162,8 @@ pub enum TokenKind {
     At,
     #[token("^")]
     Caret,
+    #[token("'")]
+    Quote,
 
     Eof,
 

@@ -1,3 +1,6 @@
+use parser::parse_decs;
+use syntax::{Dec, Ty};
+
 #[test]
 fn type_simple_tuple_alias() {
     let ds = parse_decs("type t = int * bool").unwrap();
@@ -6,9 +9,11 @@ fn type_simple_tuple_alias() {
             assert_eq!(binds.len(), 1);
             assert_eq!(binds[0].name.text, "t");
             // spot check: body is a tuple of two
-            if let Ty::Tuple(ts) = &binds[0].body {
+            if let Ty::Tuple { elems: ts, .. } = &binds[0].body {
                 assert_eq!(ts.len(), 2);
-            } else { panic!("expected tuple type"); }
+            } else {
+                panic!("expected tuple type");
+            }
         }
         _ => panic!("expected single Type dec"),
     }
@@ -26,9 +31,11 @@ fn type_parens_and_arrow_precedence() {
     let ds = parse_decs("type f = int * bool -> int").unwrap();
     match ds.as_slice() {
         [Dec::Type { binds, .. }] => {
-            if let Ty::Arrow(lhs, _rhs) = &binds[0].body {
-                assert!(matches!(**lhs, Ty::Tuple(_)));
-            } else { panic!("expected arrow type"); }
+            if let Ty::Arrow { left: lhs, .. } = &binds[0].body {
+                assert!(matches!(**lhs, Ty::Tuple { .. }));
+            } else {
+                panic!("expected arrow type");
+            }
         }
         _ => panic!("expected Type dec"),
     }
