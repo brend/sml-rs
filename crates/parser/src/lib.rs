@@ -163,54 +163,54 @@ impl<'a> Parser<'a> {
                     }
                     _ => unreachable!(),
                 };
-let mut ops = Vec::new();
-loop {
-    use lexer::TokenKind as T;
-    // capture current token and span
-    let t = self.ts.peek().clone();
-    let name_opt: Option<String> = match t.kind {
-        // alphanumeric operator names (e.g. "div", "mod", "foo")
-        T::Ident(ref s) | T::ConIdent(ref s) => Some(s.clone()),
+                let mut ops = Vec::new();
+                loop {
+                    use lexer::TokenKind as T;
+                    // capture current token and span
+                    let t = self.ts.peek().clone();
+                    let name_opt: Option<String> = match t.kind {
+                        // alphanumeric operator names (e.g. "div", "mod", "foo")
+                        T::Ident(ref s) | T::ConIdent(ref s) => Some(s.clone()),
 
-        // symbolic operators (e.g. + - * / :: <= >= < > = <> ^ @ :=)
-        T::Plus      => Some("+".into()),
-        T::Minus     => Some("-".into()),
-        T::Star      => Some("*".into()),
-        T::Slash     => Some("/".into()),
-        T::Eq        => Some("=".into()),
-        T::Neq       => Some("<>".into()),
-        T::Le        => Some("<=".into()),
-        T::Ge        => Some(">=".into()),
-        T::Lt        => Some("<".into()),
-        T::Gt        => Some(">".into()),
-        T::Caret     => Some("^".into()),
-        T::At        => Some("@".into()),
-        T::Assign    => Some(":=".into()),
-        T::Cons      => Some("::".into()),
+                        // symbolic operators (e.g. + - * / :: <= >= < > = <> ^ @ :=)
+                        T::Plus => Some("+".into()),
+                        T::Minus => Some("-".into()),
+                        T::Star => Some("*".into()),
+                        T::Slash => Some("/".into()),
+                        T::Eq => Some("=".into()),
+                        T::Neq => Some("<>".into()),
+                        T::Le => Some("<=".into()),
+                        T::Ge => Some(">=".into()),
+                        T::Lt => Some("<".into()),
+                        T::Gt => Some(">".into()),
+                        T::Caret => Some("^".into()),
+                        T::At => Some("@".into()),
+                        T::Assign => Some(":=".into()),
+                        T::Cons => Some("::".into()),
 
-        // optional: allow `op IDENT` here too (though SML usually doesn’t need `op` in fixity decls)
-        T::KwOp => {
-            self.ts.advance(); // consume 'op'
-            match self.ts.peek().kind.clone() {
-                T::Ident(s) | T::ConIdent(s) => {
-                    self.ts.advance();
-                    ops.push(s);
-                    continue;
+                        // optional: allow `op IDENT` here too (though SML usually doesn’t need `op` in fixity decls)
+                        T::KwOp => {
+                            self.ts.advance(); // consume 'op'
+                            match self.ts.peek().kind.clone() {
+                                T::Ident(s) | T::ConIdent(s) => {
+                                    self.ts.advance();
+                                    ops.push(s);
+                                    continue;
+                                }
+                                _ => return Err(self.unexpected_here(&["identifier after 'op'"])),
+                            }
+                        }
+
+                        _ => None,
+                    };
+
+                    if let Some(name) = name_opt {
+                        self.ts.advance(); // consume the operator token we just recognized
+                        ops.push(name);
+                        continue;
+                    }
+                    break; // no more operator names
                 }
-                _ => return Err(self.unexpected_here(&["identifier after 'op'"])),
-            }
-        }
-
-        _ => None,
-    };
-
-    if let Some(name) = name_opt {
-        self.ts.advance(); // consume the operator token we just recognized
-        ops.push(name);
-        continue;
-    }
-    break; // no more operator names
-}
                 // mutate env
                 if assoc == Assoc::Non {
                     for o in &ops {
@@ -231,6 +231,48 @@ loop {
                     span,
                 ))
             }
+            T::KwType => {
+    self.ts.advance(); // consume 'type'
+    let mut binds = Vec::new();
+
+    loop {
+        let span_start_bind = self.ts.peek().span;
+
+        // (Optional) tyvar sequence: ('a 'b ...)?  -- kept minimal for now
+        let mut tyvars = Vec::new();
+        while let T::Quote = self.ts.peek().kind {
+            // lexer should produce: Quote followed by Ident of the tyvar name
+            let q = self.ts.peek().span;
+            self.ts.advance(); // '
+            let tv_name = match self.ts.peek().kind.clone() {
+                T::Ident(s) => { self.ts.advance(); s }
+                _ => return Err(self.unexpected_here(&["type variable (identifier after ')"])),
+            };
+            tyvars.push(TyVar {
+                name: Name { text: tv_name },
+                is_equality: false, // adjust if you later support ''a (=type) vars
+            });
+        }
+
+        // type constructor name
+        let name = self.expect_ident_name()?;
+
+        // '='
+        self.ts.expect(T::Eq).map_err(to_parse_err)?;
+
+        // type body
+        let body = self.parse_ty()?;
+        let span = util::join(span_start_bind, util::span_of_ty(&body));
+
+        binds.push(TypeBind { tyvars, name, body, span });
+
+        if self.ts.consume_if(T::KwAnd) { continue; }
+        break;
+    }
+
+    let span = util::join(span_start, self.ts.peek().span);
+    Ok(Dec::Type { binds, span })
+}
             // TODO: datatype, type, exception, local, fixity, open
             _ => Err(self.unexpected_here(&["declaration (val/fun)"])),
         }
@@ -319,21 +361,31 @@ loop {
         }
         // Postfix: handle
         // after building `lhs` and finishing infix parsing
-if matches!(self.ts.peek().kind, T::KwHandle) {
-    let _ = self.ts.advance(); // consume 'handle'
-    let mut matches_v = Vec::new();
-    loop {
-        let p = self.parse_pat()?;                 // pattern
-        self.ts.expect(T::FatArrow).map_err(to_parse_err)?;
-        let b = self.parse_expr_bp(0)?;            // expression
-        let sp = util::join(util::span_of_pat(&p), util::span_of_exp(&b));
-        matches_v.push(Match { pat: p, body: b, span: sp });
-        if self.ts.consume_if(lexer::TokenKind::Bar) { continue; }
-        break;
-    }
-    let span = util::join(util::span_of_exp(&lhs), matches_v.last().unwrap().span);
-    lhs = Exp::Handle { exp: Box::new(lhs), matches: matches_v, span };
-}
+        if matches!(self.ts.peek().kind, T::KwHandle) {
+            let _ = self.ts.advance(); // consume 'handle'
+            let mut matches_v = Vec::new();
+            loop {
+                let p = self.parse_pat()?; // pattern
+                self.ts.expect(T::FatArrow).map_err(to_parse_err)?;
+                let b = self.parse_expr_bp(0)?; // expression
+                let sp = util::join(util::span_of_pat(&p), util::span_of_exp(&b));
+                matches_v.push(Match {
+                    pat: p,
+                    body: b,
+                    span: sp,
+                });
+                if self.ts.consume_if(lexer::TokenKind::Bar) {
+                    continue;
+                }
+                break;
+            }
+            let span = util::join(util::span_of_exp(&lhs), matches_v.last().unwrap().span);
+            lhs = Exp::Handle {
+                exp: Box::new(lhs),
+                matches: matches_v,
+                span,
+            };
+        }
 
         Ok(lhs)
     }
@@ -461,6 +513,137 @@ if matches!(self.ts.peek().kind, T::KwHandle) {
             _ => return Err(self.unexpected_here(&["expression"])),
         })
     }
+
+    // entry for types
+fn parse_ty(&mut self) -> PResult<Ty> {
+    self.parse_ty_arrow()
+}
+
+// t -> u (right associative)
+fn parse_ty_arrow(&mut self) -> PResult<Ty> {
+    let lhs = self.parse_ty_prod()?;
+    if self.ts.consume_if(lexer::TokenKind::Arrow) {
+        let rhs = self.parse_ty_arrow()?; // right-assoc
+        let span = util::join(util::span_of_ty(&lhs), util::span_of_ty(&rhs));
+        Ok(Ty::Arrow(Box::new(lhs), Box::new(rhs)))
+    } else {
+        Ok(lhs)
+    }
+}
+
+// a * b * c  ==> Ty::Tuple([a,b,c])
+fn parse_ty_prod(&mut self) -> PResult<Ty> {
+    let mut tys = Vec::new();
+    tys.push(self.parse_ty_postfix()?);
+    while self.ts.consume_if(lexer::TokenKind::Star) {
+        tys.push(self.parse_ty_postfix()?);
+    }
+    if tys.len() == 1 {
+        Ok(tys.remove(0))
+    } else {
+        Ok(Ty::Tuple(tys))
+    }
+}
+
+// handle postfix single-arg tycon: <ty> IDENT   e.g.  int list
+fn parse_ty_postfix(&mut self) -> PResult<Ty> {
+    let mut base = self.parse_ty_atom_or_prefix_app()?;
+
+    loop {
+        let t = self.ts.peek().clone();
+        match t.kind {
+            // a bare identifier following a type -> postfix one-arg tycon
+            lexer::TokenKind::Ident(ref s) | lexer::TokenKind::ConIdent(ref s) => {
+                // but only if this looks like a tycon position (no '=' / '->' / '*' / ')' / ',' / '}' / 'and' etc.)
+                // For our minimal needs, accept any Ident/ConIdent here.
+                self.ts.advance();
+                let con = TyCon { name: Name { text: s.clone() } };
+                let span = util::join(util::span_of_ty(&base), t.span);
+                base = Ty::Con(Box::new(base), con);
+            }
+            _ => break,
+        }
+    }
+
+    Ok(base)
+}
+
+// (t1, t2, ...) tycon   |   (t)   |   { ... } (TODO)  |  bare tycon/tyvar
+fn parse_ty_atom_or_prefix_app(&mut self) -> PResult<Ty> {
+    use lexer::TokenKind as T;
+
+    let t0 = self.ts.peek().clone();
+    let sp = t0.span;
+
+    match t0.kind {
+        // '(' ... ')'
+        T::LParen => {
+            self.ts.advance();
+            // Empty tuple type doesn't exist; but handle parenthesized or n-ary for prefix app
+            let first = self.parse_ty()?;
+            if self.ts.consume_if(T::Comma) {
+                // (t1, t2, ... ) tycon   OR just parenthesized tuple
+                let mut args = vec![first];
+                while {
+                    args.push(self.parse_ty()?);
+                    self.ts.consume_if(T::Comma)
+                } {}
+                let r = self.ts.expect(T::RParen).map_err(to_parse_err)?;
+                // optional trailing tycon for prefix app: (t1, t2) foo
+                match self.ts.peek().kind.clone() {
+                    T::Ident(s) | T::ConIdent(s) => {
+                        self.ts.advance();
+                        Ok(Ty::App(TyCon { name: Name { text: s } }, args))
+                    }
+                    _ => Ok(Ty::Tuple(args)), // plain tuple type
+                }
+            } else {
+                // (t)
+                let r = self.ts.expect(T::RParen).map_err(to_parse_err)?;
+                Ok(Ty::Paren(Box::new(first)))
+            }
+        }
+
+        // record types — keep for later
+        T::LBrace => {
+            // Minimal placeholder to not block you later; feel free to flesh out.
+            // { l : t, ... }  ==> Ty::Record
+            self.ts.advance();
+            let mut fields = Vec::<(Label, Ty)>::new();
+            if self.ts.consume_if(T::RBrace) {
+                return Ok(Ty::Record(fields));
+            }
+            loop {
+                let lbl = self.parse_label()?;
+                self.ts.expect(T::Colon).map_err(to_parse_err)?;
+                let ty = self.parse_ty()?;
+                fields.push((lbl, ty));
+                if self.ts.consume_if(T::Comma) { continue; }
+                break;
+            }
+            self.ts.expect(T::RBrace).map_err(to_parse_err)?;
+            Ok(Ty::Record(fields))
+        }
+
+        // bare type constructor (e.g. int, bool, option, foo)
+        T::Ident(s) | T::ConIdent(s) => {
+            self.ts.advance();
+            Ok(Ty::App(TyCon { name: Name { text: s } }, vec![]))
+        }
+
+        // simple type variables: 'a, 'b — if your lexer exposes Quote+Ident
+        T::Quote => {
+            self.ts.advance(); // '
+            let nm = match self.ts.peek().kind.clone() {
+                T::Ident(s) => { self.ts.advance(); s }
+                _ => return Err(self.unexpected_here(&["type variable name"])),
+            };
+            Ok(Ty::Var(TyVar { name: Name { text: nm }, is_equality: false }))
+        }
+
+        _ => Err(self.unexpected_here(&["type"])),
+    }
+}
 
     fn parse_paren_or_tuple(&mut self) -> PResult<Exp> {
         let l = self.ts.expect(T::LParen).map_err(to_parse_err)?;
@@ -647,8 +830,6 @@ if matches!(self.ts.peek().kind, T::KwHandle) {
             span,
         })
     }
-
-    
 
     // ===== patterns (subset) =====
     fn parse_pat(&mut self) -> PResult<Pat> {
