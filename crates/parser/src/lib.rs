@@ -322,7 +322,99 @@ impl<'a> Parser<'a> {
                     span,
                 })
             }
-            // TODO: datatype, exception, open
+            T::KwDatatype => {
+                self.ts.advance(); // consume 'datatype'
+                let mut binds = Vec::new();
+
+                loop {
+                    let span_start_bind = self.ts.peek().span;
+
+                    // Parse optional type variables: 'a 'b ...
+                    let mut tyvars = Vec::new();
+                    while let T::Quote = self.ts.peek().kind {
+                        self.ts.advance(); // consume '
+                        let tv_name = match self.ts.peek().kind.clone() {
+                            T::Ident(s) => {
+                                self.ts.advance();
+                                s
+                            }
+                            _ => {
+                                return Err(
+                                    self.unexpected_here(&["type variable (identifier after ')"])
+                                )
+                            }
+                        };
+                        tyvars.push(TyVar {
+                            name: Name { text: tv_name },
+                            is_equality: false, // TODO: support ''a equality type vars
+                        });
+                    }
+
+                    // Parse datatype name
+                    let name = self.expect_ident_name()?;
+
+                    // Expect '='
+                    self.ts.expect(T::Eq).map_err(to_parse_err)?;
+
+                    // Parse constructors separated by '|'
+                    let mut constructors = Vec::new();
+
+                    loop {
+                        let con_span_start = self.ts.peek().span;
+
+                        // Parse constructor name (must be a ConIdent)
+                        let con_name = match self.ts.peek().kind.clone() {
+                            T::ConIdent(s) => {
+                                self.ts.advance();
+                                Name { text: s }
+                            }
+                            T::Ident(s) => {
+                                self.ts.advance();
+                                Name { text: s }
+                            }
+                            _ => return Err(self.unexpected_here(&["constructor name"])),
+                        };
+
+                        // Parse optional argument type after 'of'
+                        let arg_ty = if self.ts.consume_if(T::KwOf) {
+                            Some(self.parse_ty()?)
+                        } else {
+                            None
+                        };
+
+                        let con_span = util::join(con_span_start, self.ts.peek().span);
+                        constructors.push(DataConBind {
+                            name: con_name,
+                            arg_ty,
+                            span: con_span,
+                        });
+
+                        // Check for more constructors separated by '|'
+                        if self.ts.consume_if(T::Bar) {
+                            continue;
+                        }
+                        break;
+                    }
+
+                    let bind_span = util::join(span_start_bind, self.ts.peek().span);
+                    binds.push(DataBind {
+                        tyvars,
+                        name,
+                        constructors,
+                        span: bind_span,
+                    });
+
+                    // Check for more datatype bindings separated by 'and'
+                    if self.ts.consume_if(T::KwAnd) {
+                        continue;
+                    }
+                    break;
+                }
+
+                let span = util::join(span_start, self.ts.peek().span);
+                Ok(Dec::Datatype { binds, span })
+            }
+            // TODO: exception
             _ => Err(self.unexpected_here(&["declaration (val/fun)"])),
         }
     }
