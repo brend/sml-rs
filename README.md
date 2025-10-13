@@ -25,9 +25,9 @@ An implementation of **Standard ML** (SML ’97) in **Rust** — work in progres
 ├─ Cargo.toml                 # Workspace manifest
 ├─ rust-toolchain.toml        # Pinned Rust toolchain
 ├─ crates/                    # Workspace members
-   ├─ lexer                   # Tokenization
-   ├─ syntax                  # Abstract syntax tree (AST)
-   └─ parser                  # Parsing
+│  ├─ lexer                   # Tokenization
+│  ├─ syntax                  # Abstract syntax tree (AST)
+│  └─ parser                  # Parsing
 ├─ .devcontainer/             # Dev container setup (used with GitHub Codespaces)
 └─ .github/workspaces/        # CI / Codespaces configs
 ```
