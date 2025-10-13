@@ -37,7 +37,6 @@ fn literals_bool_int_real_char_string_unit() {
     ));
 
     let e = parse_exp_hook("0xFF").unwrap();
-    println!("Exp: {:?}", e);
     assert!(matches!(
         e,
         Exp::Lit(Lit::Int {
@@ -50,7 +49,7 @@ fn literals_bool_int_real_char_string_unit() {
     let e = parse_exp_hook("3.5").unwrap();
     assert!(matches!(e, Exp::Lit(Lit::Real { value, .. }) if (value - 3.5).abs() < 1e-9));
 
-    let e = parse_exp_hook("#\"a\"").unwrap(); // adjust if your char literal differs
+    let e = parse_exp_hook("#\"a\"").unwrap();
     assert!(matches!(e, Exp::Lit(Lit::Char { value: 'a', .. })));
 
     let e = parse_exp_hook("\"hi\\n\"").unwrap();
@@ -101,6 +100,7 @@ fn tuples_records_lists_and_selection() {
 
     // cons
     let e = parse_exp_hook("1::xs").unwrap();
+    println!("Exp: {:?}", e);
     assert!(matches!(
         e,
         Exp::Cons {
@@ -109,6 +109,19 @@ fn tuples_records_lists_and_selection() {
             ..
         }
     ));
+
+    // Test right associativity: 1::2::xs should be 1::(2::xs)
+    let e = parse_exp_hook("1::2::xs").unwrap();
+    if let Exp::Cons { head, tail, .. } = e {
+        assert!(matches!(*head, Exp::Lit(_)));
+        assert!(matches!(*tail, Exp::Cons { .. }));
+    } else {
+        panic!("Expected outer Cons for 1::2::xs");
+    }
+
+    // Test with parentheses: (x + 1)::ys
+    let e = parse_exp_hook("(1 + 2)::xs").unwrap();
+    assert!(matches!(e, Exp::Cons { .. }));
 }
 
 #[test]

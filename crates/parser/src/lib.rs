@@ -483,22 +483,32 @@ impl<'a> Parser<'a> {
             }
             let rhs = self.parse_expr_bp(next_min)?;
             let span = util::join(util::span_of_exp(&lhs), util::span_of_exp(&rhs));
-            let op_var = Exp::Var {
-                name: Name {
-                    text: op_name.clone(),
-                },
-                span: op_span,
-            };
-            let app1 = Exp::App {
-                fun: Box::new(op_var),
-                arg: Box::new(lhs),
-                span,
-            };
-            lhs = Exp::App {
-                fun: Box::new(app1),
-                arg: Box::new(rhs),
-                span,
-            };
+
+            // Special handling for cons operator
+            if op_name == "::" {
+                lhs = Exp::Cons {
+                    head: Box::new(lhs),
+                    tail: Box::new(rhs),
+                    span,
+                };
+            } else {
+                let op_var = Exp::Var {
+                    name: Name {
+                        text: op_name.clone(),
+                    },
+                    span: op_span,
+                };
+                let app1 = Exp::App {
+                    fun: Box::new(op_var),
+                    arg: Box::new(lhs),
+                    span,
+                };
+                lhs = Exp::App {
+                    fun: Box::new(app1),
+                    arg: Box::new(rhs),
+                    span,
+                };
+            }
         }
         // Postfix: handle
         // after building `lhs` and finishing infix parsing
