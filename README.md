@@ -16,8 +16,6 @@ An implementation of **Standard ML** (SML ’97) in **Rust** — work in progres
 - REPL for quick experimentation
 - (Stretch) Bytecode VM or native backend
 
-*(Ticks will move as features land.)*
-
 ---
 
 ## Project layout
@@ -26,7 +24,10 @@ An implementation of **Standard ML** (SML ’97) in **Rust** — work in progres
 .
 ├─ Cargo.toml                 # Workspace manifest
 ├─ rust-toolchain.toml        # Pinned Rust toolchain
-├─ crates/                    # Workspace members (lexer, syntax, parser, etc.)
+├─ crates/                    # Workspace members
+   ├─ lexer                   # Tokenization
+   ├─ syntax                  # Abstract syntax tree (AST)
+   └─ parser                  # Parsing
 ├─ .devcontainer/             # Dev container setup (used with GitHub Codespaces)
 └─ .github/workspaces/        # CI / Codespaces configs
 ```
