@@ -50,7 +50,7 @@ pub enum Lit {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Ty {
     Var {
         var: TyVar,
@@ -223,7 +223,7 @@ pub enum Dec {
         span: Span,
     },
     Exception {
-        binds: Vec<ExnBind>,
+        binds: Vec<ExBind>,
         span: Span,
     },
     Local {
@@ -232,7 +232,6 @@ pub enum Dec {
         span: Span,
     },
     Fixity(FixityDecl, Span),
-    Open(Vec<Name>, Span),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -280,11 +279,20 @@ pub struct DataConBind {
     pub span: Span,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ExnBind {
-    pub name: Name,
-    pub arg_ty: Option<Ty>,
-    pub span: Span,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExBind {
+    /// `exception Name` or `exception Name of ty`
+    New {
+        name: Name,         // or whatever you use for long value identifiers
+        arg_ty: Option<Ty>, // `of ty` is optional
+        span: Span,
+    },
+    /// `exception Name = LongExn`
+    Alias {
+        name: Name,
+        to: Name, // target exception constructor (long id)
+        span: Span,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

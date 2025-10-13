@@ -2,7 +2,10 @@ mod fixity;
 mod util;
 
 use fixity::{Fixity, FixityEnv};
-use lexer::{TokenKind as T, TokenStream};
+use lexer::{
+    TokenKind::{self as T, KwException},
+    TokenStream,
+};
 use syntax::{ast::*, Span};
 
 pub type PResult<Ty> = Result<Ty, ParseError>;
@@ -414,7 +417,60 @@ impl<'a> Parser<'a> {
                 let span = util::join(span_start, self.ts.peek().span);
                 Ok(Dec::Datatype { binds, span })
             }
-            // TODO: exception
+            // --- inside `fn parse_dec(&mut self) -> PResult<Dec>` match ---
+            KwException => {
+                self.ts.advance(); // consume 'exception'
+                let mut binds = Vec::new();
+
+                loop {
+                    let span_start_bind = self.ts.peek().span;
+
+                    // exception constructor name (prefer ConIdent, but accept Ident too)
+                    let name = self.expect_exn_name()?;
+
+                    // Three shapes:
+                    //   exception Name
+                    //   exception Name of ty
+                    //   exception Name = OtherExn
+                    let bind = if self.ts.consume_if(T::KwOf) {
+                        // argument type
+                        let ty = self.parse_ty()?;
+                        let span = util::join(span_start_bind, self.ts.peek().span);
+                        ExBind::New {
+                            name,
+                            arg_ty: Some(ty),
+                            span,
+                        }
+                    } else if self.ts.consume_if(T::Eq) {
+                        // alias / synonym
+                        let target = self.expect_exn_name()?;
+                        let span = util::join(span_start_bind, self.ts.peek().span);
+                        ExBind::Alias {
+                            name,
+                            to: target,
+                            span,
+                        }
+                    } else {
+                        // bare exception constructor
+                        let span = util::join(span_start_bind, self.ts.peek().span);
+                        ExBind::New {
+                            name,
+                            arg_ty: None,
+                            span,
+                        }
+                    };
+
+                    binds.push(bind);
+
+                    if self.ts.consume_if(T::KwAnd) {
+                        continue;
+                    }
+                    break;
+                }
+
+                let span = util::join(span_start, self.ts.peek().span);
+                Ok(Dec::Exception { binds, span })
+            }
             _ => Err(self.unexpected_here(&["declaration (val/fun)"])),
         }
     }
@@ -1274,6 +1330,19 @@ impl<'a> Parser<'a> {
             ),
             got.span,
         )
+    }
+
+    /// Exceptions are value constructors; prefer `ConIdent` but accept `Ident`
+    /// to keep things lenient while bootstrapping.
+    fn expect_exn_name(&mut self) -> PResult<Name> {
+        use lexer::TokenKind as T;
+        match self.ts.peek().kind.clone() {
+            T::ConIdent(s) | T::Ident(s) => {
+                self.ts.advance();
+                Ok(Name { text: s })
+            }
+            _ => Err(self.unexpected_here(&["exception name (constructor)"])),
+        }
     }
 }
 
