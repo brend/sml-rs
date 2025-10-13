@@ -2,7 +2,7 @@
 
 An implementation of **Standard ML** (SML ’97) in **Rust** — work in progress.
 
-> This is an experimental, learning-first compiler/interpreter project. Expect breaking changes and rapid iteration.
+> ⚠️ This is an experimental, learning-first compiler/interpreter project. Expect breaking changes and rapid iteration.
 
 ---
 
