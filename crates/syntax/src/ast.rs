@@ -234,7 +234,6 @@ pub enum Dec {
     },
     Fixity(FixityDecl, Span),
     Open(Vec<Name>, Span),
-    Seq(Vec<Dec>, Span),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -298,7 +297,7 @@ pub enum Assoc {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FixityDecl {
-    Infix { precedence: u8, ops: Vec<Name> },
+    Infixl { precedence: u8, ops: Vec<Name> },
     Infixr { precedence: u8, ops: Vec<Name> },
     Nonfix { ops: Vec<Name> },
 }

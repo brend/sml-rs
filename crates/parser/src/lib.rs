@@ -224,13 +224,19 @@ impl<'a> Parser<'a> {
                     }
                 }
                 let span = util::join(span_start, self.ts.peek().span);
-                Ok(Dec::Fixity(
-                    syntax::ast::FixityDecl::Infix {
+                let ops = ops.iter().map(|s| Name { text: s.clone() }).collect();
+                let fixity = match assoc {
+                    Assoc::Left => syntax::ast::FixityDecl::Infixl {
                         precedence: prec,
-                        ops: ops.iter().map(|s| Name { text: s.clone() }).collect(),
+                        ops,
                     },
-                    span,
-                ))
+                    Assoc::Right => syntax::ast::FixityDecl::Infixr {
+                        precedence: prec,
+                        ops,
+                    },
+                    Assoc::Non => syntax::ast::FixityDecl::Nonfix { ops },
+                };
+                Ok(Dec::Fixity(fixity, span))
             }
             T::KwType => {
                 self.ts.advance(); // consume 'type'
@@ -288,7 +294,35 @@ impl<'a> Parser<'a> {
                 let span = util::join(span_start, self.ts.peek().span);
                 Ok(Dec::Type { binds, span })
             }
-            // TODO: datatype, type, exception, local, fixity, open
+            T::KwLocal => {
+                self.ts.advance(); // consume 'local'
+
+                // Parse local declarations
+                let mut local_decs = Vec::new();
+                while !matches!(self.ts.peek().kind, T::KwIn) {
+                    local_decs.push(self.parse_dec()?);
+                }
+
+                // Expect 'in'
+                self.ts.expect(T::KwIn).map_err(to_parse_err)?;
+
+                // Parse declarations in the 'in' section
+                let mut in_decs = Vec::new();
+                while !matches!(self.ts.peek().kind, T::KwEnd) {
+                    in_decs.push(self.parse_dec()?);
+                }
+
+                // Expect 'end'
+                self.ts.expect(T::KwEnd).map_err(to_parse_err)?;
+
+                let span = util::join(span_start, self.ts.peek().span);
+                Ok(Dec::Local {
+                    local: local_decs,
+                    in_: in_decs,
+                    span,
+                })
+            }
+            // TODO: datatype, exception, open
             _ => Err(self.unexpected_here(&["declaration (val/fun)"])),
         }
     }

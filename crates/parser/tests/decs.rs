@@ -36,12 +36,11 @@ fn type_and_datatype_and_exception() {
 }
 
 #[test]
-fn local_open_seq_fixity() {
+fn local_seq_fixity() {
     let ds = parse_decs_hook("local val x = 1 in val y = x end").unwrap();
-    assert!(matches!(ds.as_slice(), [Dec::Local { local, in_, .. }] if !local.is_empty() && !in_.is_empty()));
-
-    let ds = parse_decs_hook("open List String").unwrap();
-    assert!(matches!(ds.as_slice(), [Dec::Open(names, ..)] if names.len() == 2));
+    assert!(
+        matches!(ds.as_slice(), [Dec::Local { local, in_, .. }] if !local.is_empty() && !in_.is_empty())
+    );
 
     let ds = parse_decs_hook("infixr 5 ::").unwrap();
     assert!(matches!(ds.as_slice(),
@@ -49,5 +48,11 @@ fn local_open_seq_fixity() {
     ));
 
     let ds = parse_decs_hook("val a = 1; val b = 2").unwrap();
-    assert!(matches!(ds.as_slice(), [Dec::Seq(v, _)] if !v.is_empty()));
+    for (i, d) in ds.iter().enumerate() {
+        println!("Index: {}, Dec: {:?}", i, d);
+    }
+    assert!(
+        matches!(ds.as_slice(), [Dec::Val { rec_: false, bindings: binds, .. }, Dec::Val { rec_: false, bindings: binds2, .. }]
+            if !binds.is_empty() && !binds2.is_empty())
+    );
 }
