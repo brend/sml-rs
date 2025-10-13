@@ -533,7 +533,7 @@ impl<'a> Parser<'a> {
     // Precedence parser für Infix-Deklarationen
     fn parse_precedence(&mut self) -> PResult<u8> {
         match self.ts.peek().kind {
-            lexer::TokenKind::Int(n) => {
+            lexer::TokenKind::Int((n, _)) => {
                 self.ts.advance();
                 u8::try_from(n)
                     .map_err(|_| ParseError::new("Ungültige Präzedenzzahl", self.ts.peek().span))
@@ -613,11 +613,14 @@ impl<'a> Parser<'a> {
                 self.ts.advance();
                 Exp::List(vec![], span)
             }
-            Int(n) => {
+            Int((n, base)) => {
                 self.ts.advance();
                 Exp::Lit(Lit::Int {
                     value: n,
-                    base: IntBase::Dec,
+                    base: match base {
+                        lexer::IntBase::Dec => IntBase::Dec,
+                        lexer::IntBase::Hex => IntBase::Hex,
+                    },
                     span,
                 })
             }
@@ -1078,11 +1081,14 @@ impl<'a> Parser<'a> {
                 self.ts.advance();
                 Pat::Nil(span)
             }
-            Int(n) => {
+            Int((n, base)) => {
                 self.ts.advance();
                 Pat::Lit(Lit::Int {
                     value: n,
-                    base: IntBase::Dec,
+                    base: match base {
+                        lexer::IntBase::Dec => IntBase::Dec,
+                        lexer::IntBase::Hex => IntBase::Hex,
+                    },
                     span,
                 })
             }
@@ -1210,7 +1216,7 @@ impl<'a> Parser<'a> {
                 self.ts.advance();
                 Ok(Label::Id(Name { text: s }))
             }
-            T::Int(n) if n >= 0 => {
+            T::Int((n, _)) if n >= 0 => {
                 self.ts.advance();
                 Ok(Label::Num(n as u32))
             }

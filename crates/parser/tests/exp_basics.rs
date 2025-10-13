@@ -37,21 +37,12 @@ fn literals_bool_int_real_char_string_unit() {
     ));
 
     let e = parse_exp_hook("0xFF").unwrap();
+    println!("Exp: {:?}", e);
     assert!(matches!(
         e,
         Exp::Lit(Lit::Int {
             value: 255,
             base: IntBase::Hex,
-            ..
-        })
-    ));
-
-    let e = parse_exp_hook("0o77").unwrap();
-    assert!(matches!(
-        e,
-        Exp::Lit(Lit::Int {
-            value: 63,
-            base: IntBase::Oct,
             ..
         })
     ));

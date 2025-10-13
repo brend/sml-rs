@@ -2,6 +2,12 @@ use logos::Logos;
 use std::string::String as RustString;
 use syntax::Span;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntBase {
+    Dec,
+    Hex,
+}
+
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\n\r\f]+")]
 pub enum TokenKind {
@@ -86,8 +92,11 @@ pub enum TokenKind {
     KwNonfix,
 
     // ===== Literals =====
-    #[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
-    Int(i64),
+    #[regex(r"0x[0-9A-Fa-f]+", |lex| ((i64::from_str_radix(&lex.slice()[2..], 16).unwrap(), IntBase::Hex)))]
+    #[regex(r"[0-9]+", |lex| ((i64::from_str_radix(lex.slice(), 10).unwrap(), IntBase::Dec)))]
+    Int((i64, IntBase)),
+    //#[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
+    //Int(i64),
     #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse().ok())]
     Real(f64),
     #[regex(r#"'(\\.|[^\\'])'"#, |lex| parse_char(lex.slice()))]

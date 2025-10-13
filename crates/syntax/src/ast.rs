@@ -22,7 +22,6 @@ pub enum Label {
 pub enum IntBase {
     Dec,
     Hex,
-    Oct,
 }
 
 #[derive(Clone, Debug, PartialEq)]

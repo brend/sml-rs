@@ -11,7 +11,7 @@ fn expect_and_backtrack() {
     let t = ts.expect(Ident("x".into())).unwrap();
     assert_eq!(t.kind, Ident("x".into()));
     ts.expect(Eq).unwrap();
-    match ts.expect(Int(0)) {
+    match ts.expect(Int((0, IntBase::Dec))) {
         Ok(_) => panic!("should not match exact embedded value in Int token"),
         Err(e) => {
             // We expected a specific Int(0) which won't match. Use expect_any in real parsers.

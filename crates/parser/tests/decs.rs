@@ -49,9 +49,6 @@ fn local_seq_fixity() {
     ));
 
     let ds = parse_decs_hook("val a = 1; val b = 2").unwrap();
-    for (i, d) in ds.iter().enumerate() {
-        println!("Index: {}, Dec: {:?}", i, d);
-    }
     assert!(
         matches!(ds.as_slice(), [Dec::Val { rec_: false, bindings: binds, .. }, Dec::Val { rec_: false, bindings: binds2, .. }]
             if !binds.is_empty() && !binds2.is_empty())
