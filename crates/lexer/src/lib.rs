@@ -71,6 +71,9 @@ pub enum TokenKind {
     #[token("nil")]
     KwNil, // special constructor in SML
 
+    #[token("as")]
+    KwAs, // for as-patterns: x as pat
+
     // overloading/control words
     #[token("ref")]
     KwRef,

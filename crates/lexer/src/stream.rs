@@ -156,6 +156,7 @@ pub fn display_kind(k: &TokenKind) -> &'static str {
         KwTrue => "keyword 'true'",
         KwFalse => "keyword 'false'",
         KwNil => "keyword 'nil'",
+        KwAs => "keyword 'as'",
         KwRef => "keyword 'ref'",
         KwAndalso => "keyword 'andalso'",
         KwOrelse => "keyword 'orelse'",

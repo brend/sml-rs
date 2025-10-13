@@ -1031,7 +1031,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_pat_cons(&mut self) -> PResult<Pat> {
-        let head = self.parse_pat_atom()?; // old parse_pat body becomes parse_pat_atom
+        let head = self.parse_pat_as()?;
         if self.ts.consume_if(lexer::TokenKind::Cons) {
             let tail = self.parse_pat_cons()?; // recurse => right-associative
             let span = util::join(util::span_of_pat(&head), util::span_of_pat(&tail));
@@ -1042,6 +1042,27 @@ impl<'a> Parser<'a> {
             })
         } else {
             Ok(head)
+        }
+    }
+
+    fn parse_pat_as(&mut self) -> PResult<Pat> {
+        let first = self.parse_pat_atom()?;
+        if self.ts.consume_if(T::KwAs) {
+            let pat = self.parse_pat_as()?; // right-associative: x as y as z = x as (y as z)
+            let span = util::join(util::span_of_pat(&first), util::span_of_pat(&pat));
+            match first {
+                Pat::Var { name, .. } => Ok(Pat::As {
+                    name,
+                    pat: Box::new(pat),
+                    span,
+                }),
+                _ => Err(ParseError::new(
+                    "as-pattern requires variable name on left side",
+                    util::span_of_pat(&first),
+                )),
+            }
+        } else {
+            Ok(first)
         }
     }
 
