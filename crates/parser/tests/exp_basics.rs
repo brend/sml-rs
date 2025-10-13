@@ -100,7 +100,6 @@ fn tuples_records_lists_and_selection() {
 
     // cons
     let e = parse_exp_hook("1::xs").unwrap();
-    println!("Exp: {:?}", e);
     assert!(matches!(
         e,
         Exp::Cons {

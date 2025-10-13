@@ -1,4 +1,4 @@
-use syntax::{Pat, Lit, IntBase, Label, Name};
+use syntax::{IntBase, Label, Lit, Name, Pat};
 
 fn parse_pat_hook(src: &str) -> Result<crate::Pat, String> {
     match parser::parse_pat(src) {
@@ -16,7 +16,14 @@ fn basic_patterns() {
     assert!(matches!(p, Pat::Var { name: Name { text }, .. } if text == "x"));
 
     let p = parse_pat_hook("42").unwrap();
-    assert!(matches!(p, Pat::Lit(Lit::Int { value: 42, base: IntBase::Dec, .. })));
+    assert!(matches!(
+        p,
+        Pat::Lit(Lit::Int {
+            value: 42,
+            base: IntBase::Dec,
+            ..
+        })
+    ));
 
     let p = parse_pat_hook("(a, b, c)").unwrap();
     assert!(matches!(p, Pat::Tuple(v, _) if v.len() == 3));
@@ -29,20 +36,39 @@ fn basic_patterns() {
     ));
 
     let p = parse_pat_hook("x as (y, z)").unwrap();
+    println!("Parsed pattern: {:?}", p);
     assert!(matches!(p, Pat::As { name: Name { text }, pat: _, .. } if text == "x"));
 
     let p = parse_pat_hook("Cons x").unwrap();
-    assert!(matches!(p, Pat::Con { constructor: Name { text }, arg: Some(_), .. } if text == "Cons"));
+    assert!(
+        matches!(p, Pat::Con { constructor: Name { text }, arg: Some(_), .. } if text == "Cons")
+    );
 
     let p = parse_pat_hook("Nil").unwrap();
-    assert!(matches!(p.clone(), Pat::Con { constructor: Name { text }, arg: None, .. } if text == "Nil") // or Pat::Nil(_), depending on your grammar
-        || matches!(p, Pat::Nil(_)));
+    assert!(
+        matches!(p.clone(), Pat::Con { constructor: Name { text }, arg: None, .. } if text == "Nil") // or Pat::Nil(_), depending on your grammar
+        || matches!(p, Pat::Nil(_))
+    );
 
     let p = parse_pat_hook("p1 | p2").unwrap();
-    assert!(matches!(p, Pat::Or { left: _, right: _, .. }));
+    assert!(matches!(
+        p,
+        Pat::Or {
+            left: _,
+            right: _,
+            ..
+        }
+    ));
 
     let p = parse_pat_hook("x :: xs").unwrap();
-    assert!(matches!(p, Pat::Cons { head: _, tail: _, .. }));
+    assert!(matches!(
+        p,
+        Pat::Cons {
+            head: _,
+            tail: _,
+            ..
+        }
+    ));
 
     let p = parse_pat_hook("(x)").unwrap();
     assert!(matches!(p, Pat::Paren(_, _)));

@@ -95,11 +95,10 @@ pub enum TokenKind {
     #[regex(r"0x[0-9A-Fa-f]+", |lex| ((i64::from_str_radix(&lex.slice()[2..], 16).unwrap(), IntBase::Hex)))]
     #[regex(r"[0-9]+", |lex| ((i64::from_str_radix(lex.slice(), 10).unwrap(), IntBase::Dec)))]
     Int((i64, IntBase)),
-    //#[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
-    //Int(i64),
     #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse().ok())]
     Real(f64),
-    #[regex(r#"'(\\.|[^\\'])'"#, |lex| parse_char(lex.slice()))]
+    // SML char literal: #"x" or escapes like #"\n"
+    #[regex(r#"#"(\\.|[^\\"])""#, |lex| parse_char(lex.slice()))]
     Char(char),
     #[regex(r#""([^"\\]|\\.)*""#, |lex| parse_string(lex.slice()))]
     String(RustString),
@@ -179,14 +178,15 @@ pub enum TokenKind {
     Error,
 }
 
-// --- helpers & wrapper types unchanged ---
+// --- helpers & wrapper types ---
 fn parse_char(s: &str) -> Result<char, ()> {
-    // Entfernt die einfachen Anführungszeichen und verarbeitet Escape-Sequenzen
-    let s = s.strip_prefix('\'').and_then(|s| s.strip_suffix('\''));
+    // Expect SML char literal: #"x"
+    let s = s.strip_prefix("#\"").and_then(|s| s.strip_suffix('"'));
     let s = match s {
         Some(inner) => inner,
         None => return Err(()),
     };
+
     let mut chars = s.chars();
     let c = match chars.next() {
         Some('\\') => match chars.next() {
@@ -197,17 +197,20 @@ fn parse_char(s: &str) -> Result<char, ()> {
             Some('\'') => '\'',
             Some('"') => '"',
             Some('0') => '\0',
-            Some(other) => other,
+            Some(other) => other, // simple escapes like \a not handled specially
             None => return Err(()),
         },
         Some(c) => c,
         None => return Err(()),
     };
+
+    // ensure only one char/escape
     if chars.next().is_some() {
         return Err(());
     }
     Ok(c)
 }
+
 fn parse_string(s: &str) -> Result<RustString, ()> {
     // Entfernt die doppelten Anführungszeichen und verarbeitet Escape-Sequenzen
     let s = s.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
