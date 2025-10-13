@@ -24,7 +24,8 @@ impl ParseError {
 
 #[derive(Clone, Debug)]
 enum OpToken {
-    Sym(String, Span),   // e.g. "+"
+    Sym(String, Span), // e.g. "+"
+    #[allow(dead_code)]
     Ident(String, Span), // e.g. "++" after `op`
 }
 
