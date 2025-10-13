@@ -1014,6 +1014,25 @@ impl<'a> Parser<'a> {
 
     // ===== patterns (subset) =====
     fn parse_pat(&mut self) -> PResult<Pat> {
+        self.parse_pat_cons()
+    }
+
+    fn parse_pat_cons(&mut self) -> PResult<Pat> {
+        let head = self.parse_pat_atom()?; // old parse_pat body becomes parse_pat_atom
+        if self.ts.consume_if(lexer::TokenKind::Cons) {
+            let tail = self.parse_pat_cons()?; // recurse => right-associative
+            let span = util::join(util::span_of_pat(&head), util::span_of_pat(&tail));
+            Ok(Pat::Cons {
+                head: Box::new(head),
+                tail: Box::new(tail),
+                span,
+            })
+        } else {
+            Ok(head)
+        }
+    }
+
+    fn parse_pat_atom(&mut self) -> PResult<Pat> {
         use T::*;
         let t = self.ts.peek().clone();
         let span = t.span;
