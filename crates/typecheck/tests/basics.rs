@@ -359,6 +359,72 @@ fn test_function_identity() {
     }
 }
 
+/*
+Fn { matches: [Match { pat: Var { name: Name { text: "x" }, span: Span }, body:
+
+App { fun: App { fun: Var { name: Name { text: "+" }, span: Span }, arg: Var { name: Name { text: "x" }, span: Span }, span: Span }, arg: Lit(Int { value: 1, base: Dec, span: Span }), span: Span }, span: Span }], span: Span }
+
+*/
+
+#[test]
+fn test_function_expression() {
+    let env = setup_basic_env();
+    let opts = InferOptions::default();
+
+    // fn x => x + 1
+    let pat = syntax::ast::Pat::Var {
+        name: Name::from("x"),
+        span: dummy_span(),
+    };
+    let body = syntax::ast::Exp::App {
+        fun: Box::new(syntax::ast::Exp::App {
+            fun: Box::new(syntax::ast::Exp::Var {
+                name: Name {
+                    text: "+".to_string(),
+                },
+                span: dummy_span(),
+            }),
+            arg: Box::new(syntax::ast::Exp::Var {
+                name: Name {
+                    text: "x".to_string(),
+                },
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        }),
+        arg: Box::new(syntax::ast::Exp::Lit(syntax::ast::Lit::Int {
+            value: 1,
+            base: syntax::ast::IntBase::Dec,
+            span: dummy_span(),
+        })),
+        span: dummy_span(),
+    };
+    let match_arm = syntax::ast::Match {
+        pat,
+        body,
+        span: dummy_span(),
+    };
+    let matches = vec![match_arm];
+    let exp = Exp::Fn(&matches, dummy_span());
+
+    let result = infer_exp(&env, &opts, &exp);
+    assert!(result.is_ok());
+    let ty = result.unwrap();
+
+    // Should be 'a -> 'a (polymorphic identity function)
+    match ty {
+        Type::Con { name, args } if name == "->" && args.len() == 2 => {
+            // Both argument and return type should be the same type variable
+            assert_eq!(args[0], args[1]);
+            match &args[0] {
+                Type::Var(_) => {} // Good, it's polymorphic
+                _ => panic!("Expected type variable for identity function"),
+            }
+        }
+        _ => panic!("Expected function type"),
+    }
+}
+
 #[test]
 fn test_function_application_simple() {
     let mut env = setup_basic_env();

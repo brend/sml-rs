@@ -160,7 +160,7 @@ fn if_while_fn_let_case_raise_handle() {
         }
     ));
 
-    let e = parse_exp_hook("fn x => x").unwrap();
+    let e = parse_exp_hook("fn x => x + 1").unwrap();
     assert!(matches!(e, Exp::Fn { matches, .. } if matches.len() == 1));
 
     let e = parse_exp_hook("let val x = 1 in x end").unwrap();
