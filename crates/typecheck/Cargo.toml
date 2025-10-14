@@ -1,0 +1,12 @@
+[package]
+name = "typecheck"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+fxhash = "0.2"          # fast hash maps for perf (optional)
+smallvec = "1"          # for tuple types etc. (optional)
+
+[dependencies.syntax]
+path = "../syntax"      # adjust to your actual path

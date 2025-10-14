@@ -1,4 +1,4 @@
-use crate::span::Span;
+pub use crate::span::Span;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Name {
