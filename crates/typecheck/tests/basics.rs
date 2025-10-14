@@ -60,6 +60,15 @@ fn setup_basic_env() -> Env {
         Type::list(Type::Var(typecheck::types::TyVarId(0))),
     ); // polymorphic nil
 
+    // Add basic operators
+    env.vals.0.insert(
+        "+".to_string(),
+        typecheck::scheme::Scheme::mono(Type::arrow(
+            int_type(),
+            Type::arrow(int_type(), int_type()),
+        )),
+    );
+
     env
 }
 
@@ -405,23 +414,32 @@ fn test_function_expression() {
         span: dummy_span(),
     };
     let matches = vec![match_arm];
-    let exp = Exp::Fn(&matches, dummy_span());
+
+    // Create the proper syntax AST first
+    let fn_exp = syntax::ast::Exp::Fn {
+        matches,
+        span: dummy_span(),
+    };
+
+    // Convert to ast_map format
+    let exp = Exp::from_exp_ref(&fn_exp);
 
     let result = infer_exp(&env, &opts, &exp);
     assert!(result.is_ok());
     let ty = result.unwrap();
 
-    // Should be 'a -> 'a (polymorphic identity function)
+    // Should be int -> int (takes an int, adds 1, returns int)
     match ty {
         Type::Con { name, args } if name == "->" && args.len() == 2 => {
-            // Both argument and return type should be the same type variable
-            assert_eq!(args[0], args[1]);
-            match &args[0] {
-                Type::Var(_) => {} // Good, it's polymorphic
-                _ => panic!("Expected type variable for identity function"),
-            }
+            // Both argument and return type should be int
+            let expected_int = Type::Con {
+                name: "int".to_string(),
+                args: vec![],
+            };
+            assert_eq!(args[0], expected_int, "Expected int argument type");
+            assert_eq!(args[1], expected_int, "Expected int return type");
         }
-        _ => panic!("Expected function type"),
+        _ => panic!("Expected function type, got: {:?}", ty),
     }
 }
 

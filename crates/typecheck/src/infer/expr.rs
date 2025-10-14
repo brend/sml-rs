@@ -142,11 +142,10 @@ impl<'s> InferState<'s> {
                     let mut with_env = self.env.clone();
                     with_env.vals.0.extend(env_ext.iter().cloned());
                     let (t_body, s_b) = {
-                        let mut tmp_tvs = TyVarSupply::default();
                         Self::infer_exp_helper(
                             with_env,
                             self.opts.clone(),
-                            &mut tmp_tvs,
+                            self.tvs,
                             &ast_map::Exp::from_exp_ref(&m.body),
                         )?
                     };
@@ -165,11 +164,10 @@ impl<'s> InferState<'s> {
                     decs.iter().map(|d| ast_map::Dec::from_dec_ref(d)).collect();
                 let env2 = self.infer_decs_group(&mapped_decs)?;
                 let (t_body, s_b) = {
-                    let mut tmp_tvs = TyVarSupply::default();
                     Self::infer_exp_helper(
                         env2,
                         self.opts.clone(),
-                        &mut tmp_tvs,
+                        self.tvs,
                         &ast_map::Exp::from_exp_ref(body),
                     )?
                 };
@@ -186,21 +184,19 @@ impl<'s> InferState<'s> {
                 )?;
                 let mut s = s1.compose(sc);
                 let (tt, st) = {
-                    let mut tmp_tvs = TyVarSupply::default();
                     Self::infer_exp_helper(
                         self.env.clone(),
                         self.opts.clone(),
-                        &mut tmp_tvs,
+                        self.tvs,
                         &ast_map::Exp::from_exp_ref(t),
                     )?
                 };
                 s = st.compose(s);
                 let (te, se) = {
-                    let mut tmp_tvs = TyVarSupply::default();
                     Self::infer_exp_helper(
                         self.env.clone(),
                         self.opts.clone(),
-                        &mut tmp_tvs,
+                        self.tvs,
                         &ast_map::Exp::from_exp_ref(e),
                     )?
                 };
@@ -223,11 +219,10 @@ impl<'s> InferState<'s> {
                     let mut with_env = self.env.clone();
                     with_env.vals.0.extend(env_ext.iter().cloned());
                     let (t_body, s_b) = {
-                        let mut tmp_tvs = TyVarSupply::default();
                         Self::infer_exp_helper(
                             with_env,
                             self.opts.clone(),
-                            &mut tmp_tvs,
+                            self.tvs,
                             &ast_map::Exp::from_exp_ref(&m.body),
                         )?
                     };
