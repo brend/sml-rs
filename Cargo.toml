@@ -1,6 +1,6 @@
 
 [workspace]
-members = ["crates/lexer", "crates/parser", "crates/syntax", "crates/typecheck"]
+members = ["crates/lexer", "crates/parser", "crates/repl", "crates/syntax", "crates/typecheck"]
 resolver = "2"
 
 [workspace.package]
